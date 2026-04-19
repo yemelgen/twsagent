@@ -1,0 +1,360 @@
+syntax = "proto3";
+
+package twsagent;
+
+// TWS Agent Service - gRPC interface for Interactive Brokers TWS API
+service TWSAgent {
+  // Connection management
+  rpc Connect(ConnectRequest) returns (ConnectResponse);
+  rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
+
+  // Contract information
+  rpc GetContractDetails(ContractDetailsRequest) returns (ContractDetailsResponse);
+
+  // Historical data
+  rpc GetHistoricalData(HistoricalDataRequest) returns (HistoricalDataResponse);
+
+  // Historical ticks
+  rpc GetHistoricalTicks(HistoricalTicksRequest) returns (HistoricalTicksResponse);
+
+  // Wall Street Horizon corporate events
+  rpc GetWshMetaData(WshMetaDataRequest) returns (WshMetaDataResponse);
+  rpc GetWshEventData(WshEventDataRequest) returns (WshEventDataResponse);
+
+  // Option chain
+  rpc GetOptionChain(OptionChainRequest) returns (OptionChainResponse);
+
+  // Portfolio positions
+  rpc GetPositions(PositionsRequest) returns (PositionsResponse);
+
+  // Order history
+  rpc GetCompletedOrders(CompletedOrdersRequest) returns (CompletedOrdersResponse);
+
+  // Market scanner
+  rpc GetScannerParameters(ScannerParametersRequest) returns (ScannerParametersResponse);
+  rpc RunMarketScanner(MarketScannerRequest) returns (MarketScannerResponse);
+
+  // Real-time market data streaming
+  rpc StreamMarketData(MarketDataRequest) returns (stream MarketDataTick);
+
+  // Watchlist
+  rpc GetWatchlist(WatchlistRequest) returns (WatchlistResponse);
+}
+
+// Connection messages
+message ConnectRequest {
+  string host = 1;
+  int32 port = 2;
+  int32 client_id = 3;
+}
+
+message ConnectResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DisconnectRequest {}
+
+message DisconnectResponse {
+  bool success = 1;
+}
+
+// Contract details messages
+message ContractDetailsRequest {
+  string symbol = 1;
+  string sec_type = 2;  // STK, OPT, FUT, etc.
+  string exchange = 3;
+  string currency = 4;
+}
+
+message SecIdTag {
+  string tag = 1;   // e.g., "ISIN", "CUSIP"
+  string value = 2; // e.g., "US0378331005"
+}
+
+message ContractInfo {
+  int32 con_id = 1;
+  string symbol = 2;
+  string exchange = 3;
+  string currency = 4;
+  string sec_type = 5;
+  string local_symbol = 6;
+  string trading_class = 7;
+  string primary_exchange = 8;
+  string long_name = 9;
+  string industry = 10;
+  string category = 11;
+  string subcategory = 12;
+  double min_tick = 13;
+  string multiplier = 14;
+  repeated SecIdTag sec_ids = 15;  // ISIN, CUSIP, etc.
+  string market_name = 16;
+  string time_zone_id = 17;
+  string trading_hours = 18;
+  string liquid_hours = 19;
+}
+
+message ContractDetailsResponse {
+  repeated ContractInfo contracts = 1;
+}
+
+// Historical data messages
+message HistoricalDataRequest {
+  int32 con_id = 1;
+  string duration = 2;      // e.g., "1 D", "1 W", "1 M"
+  string bar_size = 3;      // e.g., "1 min", "5 mins", "1 hour"
+  string what_to_show = 4;  // TRADES, MIDPOINT, BID, ASK
+  bool use_rth = 5;         // Regular trading hours only
+  string exchange = 6;      // Exchange override (e.g., IDEALPRO, PAXOS). Empty = SMART
+}
+
+message Bar {
+  string time = 1;
+  double open = 2;
+  double high = 3;
+  double low = 4;
+  double close = 5;
+  int64 volume = 6;
+  int32 bar_count = 7;
+  double wap = 8;  // Weighted average price
+}
+
+message HistoricalDataResponse {
+  repeated Bar bars = 1;
+}
+
+// Historical ticks messages
+message HistoricalTicksRequest {
+  int32 con_id = 1;
+  string start_date_time = 2;  // e.g., "20170712 21:39:33" or "20170712 21:39:33 US/Eastern"
+  string end_date_time = 3;    // Exactly one of start or end must be defined
+  int32 number_of_ticks = 4;   // Max 1000
+  string what_to_show = 5;     // TRADES, BID_ASK, or MIDPOINT
+  bool use_rth = 6;            // Regular trading hours only
+  bool ignore_size = 7;        // For BID_ASK: ignore size-only updates
+  string exchange = 8;         // Exchange override (e.g., IDEALPRO, PAXOS). Empty = SMART
+}
+
+message HistoricalTickLast {
+  int64 time = 1;              // Unix timestamp
+  double price = 2;
+  int64 size = 3;
+  string exchange = 4;
+  string special_conditions = 5;
+}
+
+message HistoricalTickBidAsk {
+  int64 time = 1;              // Unix timestamp
+  double price_bid = 2;
+  double price_ask = 3;
+  int64 size_bid = 4;
+  int64 size_ask = 5;
+}
+
+message HistoricalTickMidPoint {
+  int64 time = 1;              // Unix timestamp
+  double price = 2;
+}
+
+message HistoricalTicksResponse {
+  repeated HistoricalTickLast ticks_last = 1;
+  repeated HistoricalTickBidAsk ticks_bid_ask = 2;
+  repeated HistoricalTickMidPoint ticks_midpoint = 3;
+}
+
+// Market data streaming messages
+message MarketDataRequest {
+  int32 con_id = 1;
+  repeated string tick_types = 2;  // e.g., "BID", "ASK", "LAST"
+  bool snapshot = 3;
+}
+
+message MarketDataTick {
+  int32 con_id = 1;
+  string tick_type = 2;
+  double price = 3;
+  int64 size = 4;
+  int64 timestamp = 5;
+}
+
+// Wall Street Horizon corporate events messages
+message WshMetaDataRequest {
+  // Empty request - returns all available event types
+}
+
+message WshMetaDataResponse {
+  string json_data = 1;  // JSON string with available event types
+}
+
+message WshEventDataRequest {
+  int32 con_id = 1;                // Contract ID
+  string filter = 2;               // Event type filter (e.g., "Earnings", "Dividends")
+  bool fill_watchlist = 3;         // Include watchlist events
+  bool fill_portfolio = 4;         // Include portfolio events
+  bool fill_competitors = 5;       // Include competitor events
+  string start_date = 6;           // Start date YYYYMMDD format
+  string end_date = 7;             // End date YYYYMMDD format
+  int32 total_limit = 8;           // Maximum number of results
+}
+
+message WshEventDataResponse {
+  string json_data = 1;  // JSON string with corporate events
+}
+
+// Option chain messages
+message OptionChainRequest {
+  string underlying_symbol = 1;       // e.g., "AAPL"
+  string fut_fop_exchange = 2;        // Exchange (empty string "" for all exchanges)
+  string underlying_sec_type = 3;     // e.g., "STK"
+  int32 underlying_con_id = 4;        // Contract ID of underlying (0 to look up by symbol)
+}
+
+message OptionChainInfo {
+  string exchange = 1;
+  int32 underlying_con_id = 2;
+  string trading_class = 3;
+  int32 multiplier = 4;                // Contract multiplier as integer
+  repeated string expirations = 5;     // Expiration dates in ISO format (YYYY-MM-DD)
+  repeated double strikes = 6;         // Strike prices
+}
+
+message OptionChainResponse {
+  repeated OptionChainInfo chains = 1;
+}
+
+// Positions messages
+message PositionsRequest {
+  // Empty request - returns all positions for all accounts
+}
+
+message Position {
+  string account = 1;
+  int32 con_id = 2;
+  string symbol = 3;
+  string sec_type = 4;
+  string exchange = 5;
+  string currency = 6;
+  string local_symbol = 7;
+  string trading_class = 8;
+  double position = 9;        // Quantity (positive = long, negative = short)
+  double avg_cost = 10;       // Average cost per share/contract
+  double market_value = 11;   // Current market value (position * price)
+  double unrealized_pnl = 12; // Unrealized P&L
+}
+
+message PositionsResponse {
+  repeated Position positions = 1;
+}
+
+message CompletedOrdersRequest {
+  bool api_only = 1;  // If true, return only orders placed via API
+}
+
+message CompletedOrder {
+  // Order IDs
+  int32 order_id = 1;
+  int32 client_id = 2;
+  int32 perm_id = 3;
+
+  // Contract info
+  int32 con_id = 4;
+  string symbol = 5;
+  string sec_type = 6;
+  string exchange = 7;
+  string currency = 8;
+  string local_symbol = 9;
+
+  // Order details
+  string action = 10;        // BUY or SELL
+  double total_quantity = 11;
+  double filled_quantity = 12;
+  double remaining = 13;
+
+  // Pricing
+  string order_type = 14;    // MKT, LMT, STP, etc.
+  double lmt_price = 15;     // Limit price
+  double aux_price = 16;     // Aux price (stop price for stop orders)
+  double avg_fill_price = 17;
+
+  // Status
+  string status = 18;             // Order status
+  string completed_time = 19;     // When order completed
+  string completed_status = 20;   // Completed status
+
+  // Commission
+  double commission = 21;
+  string commission_currency = 22;
+
+  // Metadata
+  string tif = 23;           // Time in force (DAY, GTC, etc.)
+  bool outside_rth = 24;     // Allow outside regular trading hours
+  int32 parent_id = 25;      // For child orders (bracket, etc.)
+  string order_ref = 26;     // User reference string
+}
+
+message CompletedOrdersResponse {
+  repeated CompletedOrder orders = 1;
+}
+
+message ScannerParametersRequest {
+  // Empty - just requests available parameters
+}
+
+message ScannerParametersResponse {
+  string xml = 1;  // XML string describing available scanner parameters
+}
+
+message MarketScannerRequest {
+  int32 number_of_rows = 1;     // Max results to return (-1 for all)
+  string instrument = 2;         // Instrument type (STK, BOND, FUT, etc.)
+  string location_code = 3;      // Market location (STK.US, STK.US.MAJOR, etc.)
+  string scan_code = 4;          // Scan type (TOP_PERC_GAIN, MOST_ACTIVE, etc.)
+
+  // Optional filters
+  double above_price = 5;        // Min price
+  double below_price = 6;        // Max price
+  int32 above_volume = 7;        // Min volume
+  double market_cap_above = 8;   // Min market cap
+  double market_cap_below = 9;   // Max market cap
+  string stock_type_filter = 10; // Stock type (ALL, STOCK, ETF)
+}
+
+message ScanResult {
+  int32 rank = 1;                // Result ranking
+  int32 con_id = 2;              // Contract ID
+  string symbol = 3;             // Symbol
+  string sec_type = 4;           // Security type
+  string primary_exchange = 5;   // Primary exchange
+  string currency = 6;           // Currency
+  string local_symbol = 7;       // Local symbol
+  string trading_class = 8;      // Trading class
+  string distance = 9;           // Distance from criteria
+  string benchmark = 10;         // Benchmark value
+  string projection = 11;        // Projection value
+  string market_name = 12;       // Market name
+}
+
+message MarketScannerResponse {
+  repeated ScanResult results = 1;
+}
+
+// Watchlist messages
+message WatchlistRequest {
+  string export_path = 1;  // Optional: override default export path
+}
+
+message WatchlistContract {
+  string symbol = 1;          // Symbol
+  string sec_type = 2;        // Security type (STK, FUT, OPT, CASH, CRYPTO, IND, etc.)
+  string exchange = 3;        // Exchange (e.g., SMART, IDEALPRO)
+  string primary_exchange = 4; // Primary exchange (e.g., NASDAQ, NYSE, AMEX)
+  string expiry = 5;          // Expiration date (YYYYMM for futures, YYYYMMDD for options)
+  double strike = 6;          // Strike price (for options)
+  string right = 7;           // Option type: "Call" or "Put"
+  string multiplier = 8;      // Contract multiplier
+  string currency = 9;        // Currency (for CASH pairs)
+}
+
+message WatchlistResponse {
+  repeated WatchlistContract contracts = 1;  // All watchlist contracts
+}
