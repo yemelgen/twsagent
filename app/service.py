@@ -171,7 +171,8 @@ class IBServicer(tws_pb2_grpc.TWSAgentServicer):
             return {"code": 0, "error": "Not connected to TWS"}
 
         signature = f"hist_data:{conId}:{duration}:{barSize}:{whatToShow}:{useRTH}"
-        if not self.pacer.acquire("historical", signature=signature):
+        contract_key = f"{conId}:{exchange or 'SMART'}:{whatToShow}"
+        if not self.pacer.acquire("historical", signature=signature, contract_key=contract_key):
             return {"code": 0, "error": "Rate limit timeout"}
 
         contract = Contract()
@@ -221,7 +222,8 @@ class IBServicer(tws_pb2_grpc.TWSAgentServicer):
             return {"code": 0, "error": "Not connected to TWS"}
 
         signature = f"hist_ticks:{conId}:{start_date_time}:{end_date_time}:{what_to_show}"
-        if not self.pacer.acquire("historical", signature=signature):
+        contract_key = f"{conId}:{exchange or 'SMART'}:{what_to_show}"
+        if not self.pacer.acquire("historical", signature=signature, contract_key=contract_key):
             return {"code": 0, "error": "Rate limit timeout"}
 
         contract = Contract()
@@ -909,6 +911,67 @@ class IBServicer(tws_pb2_grpc.TWSAgentServicer):
             context.set_details(str(e))
             return tws_pb2.CompletedOrdersResponse()
 
+    def _req_matching_symbols(self, pattern: str) -> list | dict[str, Any]:
+        """Search for contracts matching a pattern (ticker or company name)."""
+        if not self.ib.isConnected():
+            return {"code": 0, "error": "Not connected to TWS"}
+
+        if not self.pacer.acquire("general"):
+            return {"code": 0, "error": "Rate limit timeout"}
+
+        req_id = self.ib.start_request()
+        self.ib.reqMatchingSymbols(req_id, pattern)
+
+        completed = self.ib.events[req_id].wait(timeout=30)
+        if not completed:
+            self.ib.end_request(req_id)
+            self.pacer.backoff()
+            return {"code": 0, "error": "Request timeout"}
+
+        data = self.ib.data.get(req_id, [])
+        self.ib.end_request(req_id)
+
+        return data
+
+    def SearchSymbols(
+        self,
+        request: tws_pb2.SymbolSearchRequest,
+        context: grpc.ServicerContext,
+    ) -> tws_pb2.SymbolSearchResponse:
+        """Search for contracts matching a pattern (ticker or company name)."""
+        if not self._check_connection(context):
+            return tws_pb2.SymbolSearchResponse()
+
+        pattern = request.pattern
+        if not pattern:
+            return tws_pb2.SymbolSearchResponse()
+
+        data = self._req_matching_symbols(pattern)
+
+        if isinstance(data, dict) and "error" in data:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"[{data.get('code', 0)}] {data['error']}")
+            return tws_pb2.SymbolSearchResponse()
+
+        matches = []
+        for desc in data:
+            contract = desc.contract
+            matches.append(
+                tws_pb2.SymbolMatch(
+                    con_id=contract.conId,
+                    symbol=contract.symbol,
+                    sec_type=contract.secType,
+                    primary_exchange=contract.primaryExchange,
+                    currency=contract.currency,
+                    description=contract.description or "",
+                    issuer_id=contract.issuerId or "",
+                    derivative_sec_types=list(desc.derivativeSecTypes),
+                )
+            )
+
+        logger.info(f"Symbol search '{pattern}': {len(matches)} matches")
+        return tws_pb2.SymbolSearchResponse(matches=matches)
+
     def GetScannerParameters(
         self,
         request: tws_pb2.ScannerParametersRequest,
@@ -1203,6 +1266,8 @@ def serve() -> None:
     max_workers = int(os.getenv("GRPC_MAX_WORKERS"))
 
     from settings import (
+        PACING_CONTRACT_MAX,
+        PACING_CONTRACT_WINDOW,
         PACING_GENERAL_INTERVAL,
         PACING_HIST_MAX,
         PACING_HIST_WINDOW,
@@ -1214,6 +1279,8 @@ def serve() -> None:
         historical_window_seconds=PACING_HIST_WINDOW,
         identical_gap_seconds=PACING_IDENTICAL_GAP,
         general_min_interval_seconds=PACING_GENERAL_INTERVAL,
+        contract_max_requests=PACING_CONTRACT_MAX,
+        contract_window_seconds=PACING_CONTRACT_WINDOW,
     )
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))

@@ -26,6 +26,8 @@ class IBPacer:
         historical_window_seconds: int = 600,
         identical_gap_seconds: int = 15,
         general_min_interval_seconds: float = 1.0,
+        contract_max_requests: int = 5,
+        contract_window_seconds: float = 2.0,
     ) -> None:
         self._condition = threading.Condition()
         self._history = {
@@ -37,6 +39,11 @@ class IBPacer:
         self._historical_window = historical_window_seconds
         self._identical_gap = identical_gap_seconds
         self._general_min_interval = general_min_interval_seconds
+
+        # Per-contract burst limit (IB: 6 req/2s same contract+exchange+tick)
+        self._contract_max = contract_max_requests
+        self._contract_window = contract_window_seconds
+        self._contract_history: dict[str, collections.deque] = {}
 
         # Track identical request signatures for the gap rule
         self._last_request_by_signature = {}
@@ -52,6 +59,7 @@ class IBPacer:
         self,
         category: str,
         signature: str | None = None,
+        contract_key: str | None = None,
         timeout: float = 120.0,
     ) -> bool:
         """Block until it is safe to send a request in the given category.
@@ -60,6 +68,8 @@ class IBPacer:
             category: 'historical' or 'general'
             signature: Optional key for identical-request dedup
                 (historical only)
+            contract_key: Optional key for per-contract burst limiting
+                (e.g. "conId:exchange:whatToShow")
             timeout: Max seconds to wait. Returns False if exceeded.
 
         Returns:
@@ -76,10 +86,10 @@ class IBPacer:
                     return False
 
                 self._cleanup(now)
-                wait_time = self._compute_wait(category, signature, now)
+                wait_time = self._compute_wait(category, signature, contract_key, now)
 
                 if wait_time <= 0:
-                    self._record(category, signature, now)
+                    self._record(category, signature, contract_key, now)
                     return True
 
                 remaining = deadline - now
@@ -93,7 +103,9 @@ class IBPacer:
             logger.info(f"Pacer: backing off for {self._backoff_seconds}s after timeout")
             self._condition.notify_all()
 
-    def _compute_wait(self, category: str, signature: str | None, now: float) -> float:
+    def _compute_wait(
+        self, category: str, signature: str | None, contract_key: str | None, now: float
+    ) -> float:
         """Compute how long to wait before this request can proceed."""
 
         wait = 0.0
@@ -124,9 +136,20 @@ class IBPacer:
                 if gap_elapsed < self._identical_gap:
                     wait = max(wait, self._identical_gap - gap_elapsed)
 
+            # Per-contract burst limit
+            if contract_key and contract_key in self._contract_history:
+                cwindow = self._contract_history[contract_key]
+                if len(cwindow) >= self._contract_max:
+                    oldest = cwindow[0]
+                    cwait = self._contract_window - (now - oldest)
+                    if cwait > 0:
+                        wait = max(wait, cwait)
+
         return wait
 
-    def _record(self, category: str, signature: str | None, now: float) -> None:
+    def _record(
+        self, category: str, signature: str | None, contract_key: str | None, now: float
+    ) -> None:
         """Record a request and notify waiting threads."""
 
         if category in self._history:
@@ -135,6 +158,11 @@ class IBPacer:
 
         if signature:
             self._last_request_by_signature[signature] = now
+
+        if contract_key:
+            if contract_key not in self._contract_history:
+                self._contract_history[contract_key] = collections.deque()
+            self._contract_history[contract_key].append(now)
 
         logger.debug(f"Pacer: acquired category={category} signature={signature}")
         self._condition.notify_all()
@@ -156,3 +184,14 @@ class IBPacer:
         ]
         for k in stale:
             del self._last_request_by_signature[k]
+
+        # Clean per-contract windows
+        contract_cutoff = now - self._contract_window
+        empty = []
+        for key, cwindow in self._contract_history.items():
+            while cwindow and cwindow[0] < contract_cutoff:
+                cwindow.popleft()
+            if not cwindow:
+                empty.append(key)
+        for key in empty:
+            del self._contract_history[key]

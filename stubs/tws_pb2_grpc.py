@@ -85,6 +85,11 @@ class TWSAgentStub(object):
                 request_serializer=tws__pb2.CompletedOrdersRequest.SerializeToString,
                 response_deserializer=tws__pb2.CompletedOrdersResponse.FromString,
                 _registered_method=True)
+        self.SearchSymbols = channel.unary_unary(
+                '/twsagent.TWSAgent/SearchSymbols',
+                request_serializer=tws__pb2.SymbolSearchRequest.SerializeToString,
+                response_deserializer=tws__pb2.SymbolSearchResponse.FromString,
+                _registered_method=True)
         self.GetScannerParameters = channel.unary_unary(
                 '/twsagent.TWSAgent/GetScannerParameters',
                 request_serializer=tws__pb2.ScannerParametersRequest.SerializeToString,
@@ -179,6 +184,13 @@ class TWSAgentServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SearchSymbols(self, request, context):
+        """Symbol search
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetScannerParameters(self, request, context):
         """Market scanner
         """
@@ -258,6 +270,11 @@ def add_TWSAgentServicer_to_server(servicer, server):
                     servicer.GetCompletedOrders,
                     request_deserializer=tws__pb2.CompletedOrdersRequest.FromString,
                     response_serializer=tws__pb2.CompletedOrdersResponse.SerializeToString,
+            ),
+            'SearchSymbols': grpc.unary_unary_rpc_method_handler(
+                    servicer.SearchSymbols,
+                    request_deserializer=tws__pb2.SymbolSearchRequest.FromString,
+                    response_serializer=tws__pb2.SymbolSearchResponse.SerializeToString,
             ),
             'GetScannerParameters': grpc.unary_unary_rpc_method_handler(
                     servicer.GetScannerParameters,
@@ -551,6 +568,33 @@ class TWSAgent(object):
             '/twsagent.TWSAgent/GetCompletedOrders',
             tws__pb2.CompletedOrdersRequest.SerializeToString,
             tws__pb2.CompletedOrdersResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SearchSymbols(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/twsagent.TWSAgent/SearchSymbols',
+            tws__pb2.SymbolSearchRequest.SerializeToString,
+            tws__pb2.SymbolSearchResponse.FromString,
             options,
             channel_credentials,
             insecure,

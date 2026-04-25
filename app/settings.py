@@ -32,6 +32,8 @@ config.read_dict(
             "historical_window_seconds": "600",
             "identical_gap_seconds": "15",
             "general_min_interval_seconds": "1.0",
+            "contract_max_requests": "5",
+            "contract_window_seconds": "2.0",
         },
     }
 )
@@ -64,6 +66,14 @@ PACING_IDENTICAL_GAP = int(
 PACING_GENERAL_INTERVAL = float(
     os.environ.get("PACING_GENERAL_INTERVAL")
     or config.get("pacing", "general_min_interval_seconds")
+)
+PACING_CONTRACT_MAX = int(
+    os.environ.get("PACING_CONTRACT_MAX")
+    or config.get("pacing", "contract_max_requests")
+)
+PACING_CONTRACT_WINDOW = float(
+    os.environ.get("PACING_CONTRACT_WINDOW")
+    or config.get("pacing", "contract_window_seconds")
 )
 
 # Logging level configuration

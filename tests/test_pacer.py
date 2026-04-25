@@ -200,6 +200,64 @@ def test_backoff_delays_next_request():
     assert elapsed >= 0.3
 
 
+def test_contract_burst_limit():
+    """Same contract key should be limited within the burst window"""
+
+    pacer = IBPacer(
+        historical_max_requests=100,
+        general_min_interval_seconds=0.0,
+        contract_max_requests=3,
+        contract_window_seconds=5,
+    )
+
+    key = "12345:SMART:TRADES"
+
+    # Fill the per-contract window
+    for _ in range(3):
+        assert pacer.acquire("historical", contract_key=key) is True
+
+    # Next one for the same contract should timeout
+    assert pacer.acquire("historical", contract_key=key, timeout=0.5) is False
+
+
+def test_contract_burst_different_contracts():
+    """Different contract keys should not interfere with each other"""
+
+    pacer = IBPacer(
+        historical_max_requests=100,
+        general_min_interval_seconds=0.0,
+        contract_max_requests=2,
+        contract_window_seconds=5,
+    )
+
+    # Fill one contract's window
+    for _ in range(2):
+        pacer.acquire("historical", contract_key="111:SMART:TRADES")
+
+    # Different contract should still work
+    assert pacer.acquire("historical", contract_key="222:SMART:TRADES") is True
+
+
+def test_contract_burst_window_slides():
+    """Per-contract limit should clear after the window expires"""
+
+    pacer = IBPacer(
+        historical_max_requests=100,
+        general_min_interval_seconds=0.0,
+        contract_max_requests=2,
+        contract_window_seconds=0.3,
+    )
+
+    key = "12345:SMART:TRADES"
+    pacer.acquire("historical", contract_key=key)
+    pacer.acquire("historical", contract_key=key)
+
+    # Wait for window to expire
+    time.sleep(0.4)
+
+    assert pacer.acquire("historical", contract_key=key) is True
+
+
 def test_backoff_expires():
     """After cooldown period, requests should proceed without delay"""
 

@@ -30,6 +30,9 @@ service TWSAgent {
   // Order history
   rpc GetCompletedOrders(CompletedOrdersRequest) returns (CompletedOrdersResponse);
 
+  // Symbol search
+  rpc SearchSymbols(SymbolSearchRequest) returns (SymbolSearchResponse);
+
   // Market scanner
   rpc GetScannerParameters(ScannerParametersRequest) returns (ScannerParametersResponse);
   rpc RunMarketScanner(MarketScannerRequest) returns (MarketScannerResponse);
@@ -336,6 +339,26 @@ message ScanResult {
 
 message MarketScannerResponse {
   repeated ScanResult results = 1;
+}
+
+// Symbol search messages
+message SymbolSearchRequest {
+  string pattern = 1;  // Search pattern (ticker, company name, or partial match)
+}
+
+message SymbolMatch {
+  int32 con_id = 1;
+  string symbol = 2;
+  string sec_type = 3;
+  string primary_exchange = 4;
+  string currency = 5;
+  string description = 6;         // Company name / description
+  string issuer_id = 7;
+  repeated string derivative_sec_types = 8;  // Available derivative types (OPT, FUT, etc.)
+}
+
+message SymbolSearchResponse {
+  repeated SymbolMatch matches = 1;
 }
 
 // Watchlist messages
