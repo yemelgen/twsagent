@@ -82,5 +82,8 @@ cython_debug/
 # Ignore MacOS system files
 .DS_Store
 
+# Ignore Jetbrains settings
+.idea/
+
 # Ignore IB API files
 ibapi/
