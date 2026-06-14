@@ -127,6 +127,10 @@ class IBServicer(tws_pb2_grpc.TWSAgentServicer):
         secType: str = "STK",
         exchange: str = "SMART",
         currency: str = "USD",
+        expiry: str = "",
+        strike: float = 0.0,
+        right: str = "",
+        multiplier: str = "",
     ) -> list[ContractDetails] | dict[str, Any]:
         if not self.ib.isConnected():
             return {"code": 0, "error": "Not connected to TWS"}
@@ -138,6 +142,14 @@ class IBServicer(tws_pb2_grpc.TWSAgentServicer):
         contract.symbol = symbol
         contract.secType = secType
         contract.currency = currency
+        if expiry:
+            contract.lastTradeDateOrContractMonth = expiry
+        if strike:
+            contract.strike = strike
+        if right:
+            contract.right = self._contract_right(right)
+        if multiplier:
+            contract.multiplier = multiplier
         if exchange and exchange != "SMART":
             contract.exchange = "SMART"
             contract.primaryExchange = exchange
@@ -157,6 +169,15 @@ class IBServicer(tws_pb2_grpc.TWSAgentServicer):
         self.ib.end_request(req_id)
 
         return data
+
+    @staticmethod
+    def _contract_right(right: str) -> str:
+        value = (right or "").strip().upper()
+        if value in {"CALL", "C"}:
+            return "C"
+        if value in {"PUT", "P"}:
+            return "P"
+        return right
 
     def _req_historical_data(
         self,
@@ -392,6 +413,10 @@ class IBServicer(tws_pb2_grpc.TWSAgentServicer):
                 request.sec_type or "STK",
                 request.exchange or "SMART",
                 request.currency or "USD",
+                request.expiry,
+                request.strike,
+                request.right,
+                request.multiplier,
             )
 
             if isinstance(data, dict) and "error" in data:
@@ -435,6 +460,10 @@ class IBServicer(tws_pb2_grpc.TWSAgentServicer):
                         time_zone_id=d.timeZoneId or "",
                         trading_hours=d.tradingHours or "",
                         liquid_hours=d.liquidHours or "",
+                        expiry=d.contract.lastTradeDateOrContractMonth or "",
+                        strike=d.contract.strike or 0.0,
+                        right=d.contract.right or "",
+                        contract_month=d.contract.lastTradeDateOrContractMonth or "",
                     )
                 )
 

@@ -68,6 +68,10 @@ message ContractDetailsRequest {
   string sec_type = 2;  // STK, OPT, FUT, etc.
   string exchange = 3;
   string currency = 4;
+  string expiry = 5;    // YYYYMM for futures, YYYYMMDD for options
+  double strike = 6;    // Option strike
+  string right = 7;     // Option right: C/P, Call/Put
+  string multiplier = 8;
 }
 
 message SecIdTag {
@@ -95,6 +99,10 @@ message ContractInfo {
   string time_zone_id = 17;
   string trading_hours = 18;
   string liquid_hours = 19;
+  string expiry = 20;
+  double strike = 21;
+  string right = 22;
+  string contract_month = 23;
 }
 
 message ContractDetailsResponse {
