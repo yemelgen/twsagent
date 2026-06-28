@@ -117,6 +117,7 @@ message HistoricalDataRequest {
   string what_to_show = 4;  // TRADES, MIDPOINT, BID, ASK
   bool use_rth = 5;         // Regular trading hours only
   string exchange = 6;      // Exchange override (e.g., IDEALPRO, PAXOS). Empty = SMART
+  string end_date_time = 7; // Optional IB endDateTime (yyyymmdd HH:mm:ss TZ). Empty = now
 }
 
 message Bar {

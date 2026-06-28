@@ -187,13 +187,18 @@ class IBServicer(tws_pb2_grpc.TWSAgentServicer):
         whatToShow: str = "TRADES",
         useRTH: bool = False,
         exchange: str = "",
+        endDateTime: str = "",
     ) -> list | dict[str, Any]:
         if not self.ib.isConnected():
             return {"code": 0, "error": "Not connected to TWS"}
 
-        signature = f"hist_data:{conId}:{duration}:{barSize}:{whatToShow}:{useRTH}"
+        signature = (
+            f"hist_data:{conId}:{endDateTime}:{duration}:{barSize}:{whatToShow}:{useRTH}"
+        )
         contract_key = f"{conId}:{exchange or 'SMART'}:{whatToShow}"
-        if not self.pacer.acquire("historical", signature=signature, contract_key=contract_key):
+        if not self.pacer.acquire(
+            "historical", signature=signature, contract_key=contract_key
+        ):
             return {"code": 0, "error": "Rate limit timeout"}
 
         contract = Contract()
@@ -205,7 +210,7 @@ class IBServicer(tws_pb2_grpc.TWSAgentServicer):
         self.ib.reqHistoricalData(
             req_id,
             contract,
-            "",  # endDateTime = now
+            endDateTime,
             duration,
             barSize,
             whatToShow,
@@ -244,7 +249,9 @@ class IBServicer(tws_pb2_grpc.TWSAgentServicer):
 
         signature = f"hist_ticks:{conId}:{start_date_time}:{end_date_time}:{what_to_show}"
         contract_key = f"{conId}:{exchange or 'SMART'}:{what_to_show}"
-        if not self.pacer.acquire("historical", signature=signature, contract_key=contract_key):
+        if not self.pacer.acquire(
+            "historical", signature=signature, contract_key=contract_key
+        ):
             return {"code": 0, "error": "Rate limit timeout"}
 
         contract = Contract()
@@ -492,6 +499,7 @@ class IBServicer(tws_pb2_grpc.TWSAgentServicer):
                 request.what_to_show or "TRADES",
                 request.use_rth,
                 request.exchange,
+                request.end_date_time,
             )
 
             if isinstance(data, dict) and "error" in data:
